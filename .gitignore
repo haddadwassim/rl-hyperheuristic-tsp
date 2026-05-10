@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Results and logs
+results/*
+!results/.gitkeep
+*.log
+
+# Data
+data/*
+!data/.gitkeep
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
