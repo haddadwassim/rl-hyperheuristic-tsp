@@ -1,0 +1,14 @@
+[project]
+name = "tsp-hh"
+version = "0.1.0"
+description = "Adaptive reinforcement learning hyper-heuristic for the Traveling Salesman Problem"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pandas",
+    "tqdm",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
