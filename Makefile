@@ -1,4 +1,4 @@
-.PHONY: test baselines random-hh train-q eval-q compare compare-q plots clean-results
+.PHONY: test baselines random-hh train-q eval-q compare compare-q plots train-plots clean-results
 
 test:
 	pytest
@@ -28,6 +28,12 @@ train-q:
 		--epsilon-min 0.05 \
 		--epsilon-decay 0.995 \
 		--out-dir results/q_learning
+
+train-plots:
+	python experiments/plot_training.py \
+		--log-path results/q_learning/q_learning_train_log.csv \
+		--out-dir results/q_learning/plots \
+		--window 25
 
 eval-q:
 	python experiments/evaluate_q_learning.py \
