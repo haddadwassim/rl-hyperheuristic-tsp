@@ -1,36 +1,47 @@
 # Adaptive Reinforcement Learning Hyper-Heuristic for the Traveling Salesman Problem
 
-This project implements and evaluates a reinforcement learning-based hyper-heuristic for the Traveling Salesman Problem (TSP).
+This repository implements a reinforcement learning-based hyper-heuristic for the Traveling Salesman Problem (TSP).
 
-The goal is not to replace highly optimized solvers such as LKH, but to study whether an adaptive learning-based heuristic selector can improve robustness over fixed local-search strategies.
+The goal is not to replace highly optimized TSP solvers such as LKH or Concorde. Instead, the project studies whether a lightweight learning-based heuristic selector can adaptively choose among several low-level heuristics and improve robustness compared with fixed or random heuristic strategies.
 
-## Main Idea
+## Idea
 
-Instead of directly constructing TSP tours, the reinforcement learning agent selects among several low-level heuristics such as:
+The method starts from an initial TSP tour and repeatedly selects one low-level heuristic to apply.
 
-- 2-opt
-- swap
-- insertion
-- random perturbation
-- local search intensification
+The low-level heuristics currently include:
 
-At each step, the agent observes the current search state and chooses which heuristic to apply next.
+- first-improvement 2-opt
+- best-improvement 2-opt
+- random swap
+- random insertion
+- perturbation
 
-## Planned Structure
-
-1. Implement TSP instance generation and tour evaluation.
-2. Implement baseline heuristics.
-3. Implement a hyper-heuristic environment.
-4. Train a reinforcement learning agent.
-5. Compare against fixed heuristic baselines.
-6. Analyze performance on different TSP instance sizes and types.
+A tabular Q-learning agent observes a compact state describing the search process and learns which heuristic action to apply.
 
 ## Repository Structure
 
 ```text
-src/tsp_hh/      Core implementation
-experiments/     Experiment scripts
-data/            TSP instances
-results/         Logs, metrics, and plots
-notebooks/       Exploratory analysis
-tests/           Unit tests
+rl-hyperheuristic-tsp/
+│
+├── src/tsp_hh/
+│   ├── instances.py       # TSP instance generation and distance matrix
+│   ├── tour.py            # Tour validation and tour length
+│   ├── heuristics.py      # Low-level TSP heuristics
+│   ├── hyper_env.py       # Hyper-heuristic environment
+│   └── q_learning.py      # Tabular Q-learning agent
+│
+├── experiments/
+│   ├── run_baselines.py
+│   ├── run_random_hh.py
+│   ├── run_comparison.py
+│   ├── train_q_learning.py
+│   ├── evaluate_q_learning.py
+│   └── plot_comparison.py
+│
+├── tests/
+├── data/
+├── results/
+├── notebooks/
+├── requirements.txt
+├── pyproject.toml
+└── README.md
