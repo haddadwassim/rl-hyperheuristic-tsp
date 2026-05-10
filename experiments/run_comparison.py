@@ -1,6 +1,7 @@
 import argparse
 import time
 from pathlib import Path
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,29 @@ from tsp_hh.instances import generate_euclidean_instance
 from tsp_hh.tour import tour_length, random_tour
 from tsp_hh.heuristics import nearest_neighbor_tour, repeated_two_opt
 from tsp_hh.hyper_env import TSPHyperHeuristicEnv
+from tsp_hh.q_learning import QLearningAgent, discretize_state
+
+
+def load_q_learning_agent(path: Path, seed: int | None = None) -> QLearningAgent:
+    """
+    Load a trained Q-learning agent from a pickle file.
+    """
+    with path.open("rb") as f:
+        payload = pickle.load(f)
+
+    agent = QLearningAgent(
+        n_actions=payload["n_actions"],
+        learning_rate=payload["learning_rate"],
+        discount_factor=payload["discount_factor"],
+        epsilon=0.0,
+        epsilon_min=0.0,
+        epsilon_decay=1.0,
+        seed=seed,
+    )
+
+    agent.q_table = payload["q_table"]
+
+    return agent
 
 
 def run_random_baseline(instance, n_cities: int, seed: int) -> dict:
@@ -29,6 +53,62 @@ def run_random_baseline(instance, n_cities: int, seed: int) -> dict:
         "improvement": 0.0,
         "runtime_sec": runtime_sec,
     }
+
+
+def run_q_learning_hh_baseline(
+    instance,
+    n_cities: int,
+    seed: int,
+    hh_max_steps: int,
+    initial_method: str,
+    agent: QLearningAgent,
+) -> dict:
+    env = TSPHyperHeuristicEnv(
+        distance_matrix=instance.distance_matrix,
+        initial_method=initial_method,
+        max_steps=hh_max_steps,
+        seed=seed,
+    )
+
+    state = env.reset()
+
+    initial_length = env.best_length
+    action_counts = {action_name: 0 for action_name in env.ACTION_NAMES.values()}
+
+    start_time = time.perf_counter()
+
+    done = False
+
+    while not done:
+        state_key = discretize_state(
+            state=state,
+            initial_length=initial_length,
+            max_steps=hh_max_steps,
+        )
+
+        action = agent.select_action(state_key, training=False)
+
+        next_state, _, done, info = env.step(action)
+
+        action_counts[info["action_name"]] += 1
+        state = next_state
+
+    runtime_sec = time.perf_counter() - start_time
+
+    result = {
+        "method": "q_learning_hh",
+        "n_cities": n_cities,
+        "seed": seed,
+        "tour_length": env.best_length,
+        "improvement": initial_length - env.best_length,
+        "hh_steps": hh_max_steps,
+        "runtime_sec": runtime_sec,
+    }
+
+    for action_name, count in action_counts.items():
+        result[f"count_{action_name}"] = count
+
+    return result
 
 
 def run_nearest_neighbor_baseline(instance, n_cities: int, seed: int) -> dict:
@@ -205,6 +285,20 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
+        "--q-table-path",
+        type=str,
+        default=None,
+        help="Optional path to a trained Q-table. If provided, q_learning_hh is included.",
+    )
+
+    parser.add_argument(
+        "--agent-seed",
+        type=int,
+        default=42,
+        help="Seed for the Q-learning agent during evaluation.",
+    )
+
+    parser.add_argument(
         "--n-cities",
         type=int,
         nargs="+",
@@ -250,6 +344,18 @@ def main():
 
     args = parser.parse_args()
 
+    q_agent = None
+
+    if args.q_table_path is not None:
+        q_table_path = Path(args.q_table_path)
+
+        if not q_table_path.exists():
+            raise FileNotFoundError(f"Q-table not found: {q_table_path}")
+
+        q_agent = load_q_learning_agent(q_table_path, seed=args.agent_seed)
+        print(f"Loaded Q-learning agent from: {q_table_path}")
+        print(f"Loaded Q-table states: {len(q_agent.q_table)}")
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -262,6 +368,9 @@ def main():
         "nearest_neighbor_2opt",
         "random_hh",
     ]
+
+    if q_agent is not None:
+        methods.append("q_learning_hh")
 
     for n_cities in args.n_cities:
         for seed in range(args.n_instances):
@@ -290,6 +399,18 @@ def main():
                     args.hh_initial_method,
                 ),
             ]
+
+            if q_agent is not None:
+                rows.append(
+                    run_q_learning_hh_baseline(
+                        instance=instance,
+                        n_cities=n_cities,
+                        seed=seed,
+                        hh_max_steps=args.hh_max_steps,
+                        initial_method=args.hh_initial_method,
+                        agent=q_agent,
+                    )
+                )
 
             all_results.extend(rows)
 
