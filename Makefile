@@ -1,4 +1,4 @@
-.PHONY: test baselines random-hh train-q eval-q compare compare-q plots train-plots clean-results
+.PHONY: test baselines random-hh train-q eval-q compare compare-q plots train-plots analyze clean-results
 
 test:
 	pytest
@@ -66,6 +66,12 @@ plots:
 		--summary-path results/comparison_with_q/comparison_summary.csv \
 		--raw-path results/comparison_with_q/comparison_raw.csv \
 		--out-dir results/comparison_with_q/plots
+
+analyze:
+	python experiments/analyze_results.py \
+		--train-log results/q_learning/q_learning_train_log.csv \
+		--summary results/comparison_with_q/comparison_summary.csv \
+		--raw results/comparison_with_q/comparison_raw.csv
 
 clean-results:
 	rm -rf results/baselines
