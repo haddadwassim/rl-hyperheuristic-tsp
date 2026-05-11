@@ -39,14 +39,28 @@ def paired_method_data(
     n_cities: int,
 ) -> pd.DataFrame:
     """
-    Return paired results for method_a and method_b on the same seeds.
+    Return paired results for method_a and method_b on the same seed/run_seed.
 
     Lower tour length is better.
     """
     subset = df[df["n_cities"] == n_cities].copy()
 
+    if "seed" in subset.columns:
+        pair_index = "seed"
+    elif "run_seed" in subset.columns:
+        pair_index = "run_seed"
+    else:
+        raise ValueError("Raw file must contain either 'seed' or 'run_seed'")
+
+    # If TSPLIB data contains several instances with the same n_cities,
+    # pair by both instance and run_seed.
+    if "instance" in subset.columns:
+        index_cols = ["instance", pair_index]
+    else:
+        index_cols = [pair_index]
+
     pivot = subset.pivot_table(
-        index="seed",
+        index=index_cols,
         columns="method",
         values="tour_length",
         aggfunc="first",
@@ -138,11 +152,14 @@ def run_statistical_tests(
 
     df = pd.read_csv(raw_path)
 
-    required_columns = {"n_cities", "seed", "method", "tour_length"}
+    required_columns = {"n_cities", "method", "tour_length"}
     missing = required_columns - set(df.columns)
 
     if missing:
         raise ValueError(f"Missing columns in raw file: {missing}")
+
+    if "seed" not in df.columns and "run_seed" not in df.columns:
+        raise ValueError("Raw file must contain either 'seed' or 'run_seed'")
 
     rows = []
 
