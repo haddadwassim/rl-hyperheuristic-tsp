@@ -49,6 +49,7 @@ compare:
 		--n-cities 20 50 100 \
 		--n-instances 30 \
 		--two-opt-max-iterations 200 \
+		--two-opt-long-max-iterations 1000 \
 		--hh-max-steps 50 \
 		--out-dir results/comparison
 
@@ -57,6 +58,7 @@ compare-q:
 		--n-cities 20 50 100 \
 		--n-instances 30 \
 		--two-opt-max-iterations 200 \
+		--two-opt-long-max-iterations 1000 \
 		--hh-max-steps 50 \
 		--q-table-path results/q_learning/q_table.pkl \
 		--out-dir results/comparison_with_q

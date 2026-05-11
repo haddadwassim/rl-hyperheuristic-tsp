@@ -10,6 +10,8 @@ METHOD_LABELS = {
     "nearest_neighbor": "Nearest Neighbor",
     "random_2opt": "Random + 2-opt",
     "nearest_neighbor_2opt": "NN + 2-opt",
+    "random_2opt_long": "Random + 2-opt Long",
+    "nearest_neighbor_2opt_long": "NN + 2-opt Long",
     "random_hh": "Random HH",
     "q_learning_hh": "Q-learning HH",
 }

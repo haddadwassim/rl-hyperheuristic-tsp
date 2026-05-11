@@ -328,6 +328,13 @@ def main():
     )
 
     parser.add_argument(
+        "--two-opt-long-max-iterations",
+        type=int,
+        default=1000,
+        help="Maximum number of repeated 2-opt moves for long 2-opt baselines.",
+    )
+
+    parser.add_argument(
         "--hh-initial-method",
         type=str,
         default="nearest_neighbor",
@@ -366,6 +373,8 @@ def main():
         "nearest_neighbor",
         "random_2opt",
         "nearest_neighbor_2opt",
+        "random_2opt_long",
+        "nearest_neighbor_2opt_long",
         "random_hh",
     ]
 
@@ -379,18 +388,41 @@ def main():
             rows = [
                 run_random_baseline(instance, n_cities, seed),
                 run_nearest_neighbor_baseline(instance, n_cities, seed),
+
                 run_random_2opt_baseline(
                     instance,
                     n_cities,
                     seed,
                     args.two_opt_max_iterations,
                 ),
+
                 run_nearest_neighbor_2opt_baseline(
                     instance,
                     n_cities,
                     seed,
                     args.two_opt_max_iterations,
                 ),
+
+                {
+                    **run_random_2opt_baseline(
+                        instance,
+                        n_cities,
+                        seed,
+                        args.two_opt_long_max_iterations,
+                    ),
+                    "method": "random_2opt_long",
+                },
+
+                {
+                    **run_nearest_neighbor_2opt_baseline(
+                        instance,
+                        n_cities,
+                        seed,
+                        args.two_opt_long_max_iterations,
+                    ),
+                    "method": "nearest_neighbor_2opt_long",
+                },
+
                 run_random_hh_baseline(
                     instance,
                     n_cities,

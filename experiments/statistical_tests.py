@@ -15,7 +15,9 @@ except ImportError:
 DEFAULT_COMPARISONS = [
     ("q_learning_hh", "random_hh"),
     ("q_learning_hh", "nearest_neighbor_2opt"),
+    ("q_learning_hh", "nearest_neighbor_2opt_long"),
     ("q_learning_hh", "random_2opt"),
+    ("q_learning_hh", "random_2opt_long"),
     ("q_learning_hh", "nearest_neighbor"),
 ]
 
