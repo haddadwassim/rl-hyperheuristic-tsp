@@ -244,6 +244,64 @@ def run_random_hh_baseline(
 
     return result
 
+def run_fixed_hh_baseline(
+    instance,
+    n_cities: int,
+    seed: int,
+    hh_max_steps: int,
+    initial_method: str,
+    fixed_action: int | None,
+    method_name: str,
+) -> dict:
+    """
+    Run a fixed-policy hyper-heuristic baseline.
+
+    If fixed_action is an integer, the same action is selected at every step.
+    If fixed_action is None, actions are cycled in order: 0, 1, 2, 3, 4, ...
+    """
+    env = TSPHyperHeuristicEnv(
+        distance_matrix=instance.distance_matrix,
+        initial_method=initial_method,
+        max_steps=hh_max_steps,
+        seed=seed,
+    )
+
+    initial_length = env.best_length
+    action_counts = {action_name: 0 for action_name in env.ACTION_NAMES.values()}
+
+    start_time = time.perf_counter()
+
+    done = False
+    step = 0
+
+    while not done:
+        if fixed_action is None:
+            action = step % len(env.ACTION_NAMES)
+        else:
+            action = fixed_action
+
+        _, _, done, info = env.step(action)
+
+        action_counts[info["action_name"]] += 1
+        step += 1
+
+    runtime_sec = time.perf_counter() - start_time
+
+    result = {
+        "method": method_name,
+        "n_cities": n_cities,
+        "seed": seed,
+        "tour_length": env.best_length,
+        "improvement": initial_length - env.best_length,
+        "hh_steps": hh_max_steps,
+        "runtime_sec": runtime_sec,
+    }
+
+    for action_name, count in action_counts.items():
+        result[f"count_{action_name}"] = count
+
+    return result
+
 
 def summarize_results(df: pd.DataFrame) -> pd.DataFrame:
     summary = (
@@ -376,6 +434,12 @@ def main():
         "random_2opt_long",
         "nearest_neighbor_2opt_long",
         "random_hh",
+        "always_first_2opt",
+        "always_best_2opt",
+        "always_random_swap",
+        "always_random_insertion",
+        "always_perturbation",
+        "cycle_hh",
     ]
 
     if q_agent is not None:
@@ -429,6 +493,66 @@ def main():
                     seed,
                     args.hh_max_steps,
                     args.hh_initial_method,
+                ),
+
+                run_fixed_hh_baseline(
+                    instance=instance,
+                    n_cities=n_cities,
+                    seed=seed,
+                    hh_max_steps=args.hh_max_steps,
+                    initial_method=args.hh_initial_method,
+                    fixed_action=0,
+                    method_name="always_first_2opt",
+                ),
+
+                run_fixed_hh_baseline(
+                    instance=instance,
+                    n_cities=n_cities,
+                    seed=seed,
+                    hh_max_steps=args.hh_max_steps,
+                    initial_method=args.hh_initial_method,
+                    fixed_action=1,
+                    method_name="always_best_2opt",
+                ),
+
+                run_fixed_hh_baseline(
+                    instance=instance,
+                    n_cities=n_cities,
+                    seed=seed,
+                    hh_max_steps=args.hh_max_steps,
+                    initial_method=args.hh_initial_method,
+                    fixed_action=2,
+                    method_name="always_random_swap",
+                ),
+
+                run_fixed_hh_baseline(
+                    instance=instance,
+                    n_cities=n_cities,
+                    seed=seed,
+                    hh_max_steps=args.hh_max_steps,
+                    initial_method=args.hh_initial_method,
+                    fixed_action=3,
+                    method_name="always_random_insertion",
+                ),
+
+                run_fixed_hh_baseline(
+                    instance=instance,
+                    n_cities=n_cities,
+                    seed=seed,
+                    hh_max_steps=args.hh_max_steps,
+                    initial_method=args.hh_initial_method,
+                    fixed_action=4,
+                    method_name="always_perturbation",
+                ),
+
+                run_fixed_hh_baseline(
+                    instance=instance,
+                    n_cities=n_cities,
+                    seed=seed,
+                    hh_max_steps=args.hh_max_steps,
+                    initial_method=args.hh_initial_method,
+                    fixed_action=None,
+                    method_name="cycle_hh",
                 ),
             ]
 

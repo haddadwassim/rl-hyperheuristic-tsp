@@ -14,11 +14,15 @@ except ImportError:
 
 DEFAULT_COMPARISONS = [
     ("q_learning_hh", "random_hh"),
+    ("q_learning_hh", "always_first_2opt"),
+    ("q_learning_hh", "always_best_2opt"),
+    ("q_learning_hh", "always_random_swap"),
+    ("q_learning_hh", "always_random_insertion"),
+    ("q_learning_hh", "always_perturbation"),
+    ("q_learning_hh", "cycle_hh"),
     ("q_learning_hh", "nearest_neighbor_2opt"),
     ("q_learning_hh", "nearest_neighbor_2opt_long"),
-    ("q_learning_hh", "random_2opt"),
     ("q_learning_hh", "random_2opt_long"),
-    ("q_learning_hh", "nearest_neighbor"),
 ]
 
 

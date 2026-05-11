@@ -13,6 +13,12 @@ METHOD_LABELS = {
     "random_2opt_long": "Random + 2-opt Long",
     "nearest_neighbor_2opt_long": "NN + 2-opt Long",
     "random_hh": "Random HH",
+    "always_first_2opt": "Always First 2-opt",
+    "always_best_2opt": "Always Best 2-opt",
+    "always_random_swap": "Always Swap",
+    "always_random_insertion": "Always Insertion",
+    "always_perturbation": "Always Perturbation",
+    "cycle_hh": "Cyclic HH",
     "q_learning_hh": "Q-learning HH",
 }
 
