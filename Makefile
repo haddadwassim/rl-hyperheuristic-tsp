@@ -1,4 +1,4 @@
-.PHONY: test baselines random-hh train-q eval-q compare compare-q plots train-plots analyze stats clean-results
+.PHONY: test baselines random-hh train-q train-q-v2 eval-q compare compare-q plots train-plots analyze stats clean-results
 
 test:
 	pytest
@@ -28,6 +28,22 @@ train-q:
 		--epsilon-min 0.05 \
 		--epsilon-decay 0.995 \
 		--out-dir results/q_learning
+
+train-q-v2:
+	python experiments/train_q_learning_v2.py \
+		--episodes 3000 \
+		--n-cities 20 50 100 \
+		--max-steps 100 \
+		--initial-method nearest_neighbor \
+		--k-neighbors 10 \
+		--perturbation-moves 3 \
+		--reward-scale initial_length \
+		--learning-rate 0.1 \
+		--discount-factor 0.95 \
+		--epsilon 1.0 \
+		--epsilon-min 0.02 \
+		--epsilon-decay 0.998 \
+		--out-dir results/q_learning_v2
 
 train-plots:
 	python experiments/plot_training.py \
