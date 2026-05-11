@@ -1,4 +1,4 @@
-.PHONY: test baselines random-hh train-q train-q-v2 eval-q compare compare-q plots train-plots analyze stats clean-results
+.PHONY: test baselines random-hh train-q train-q-v2 eval-q compare compare-q compare-v2 plots train-plots analyze stats stats-v2 clean-results
 
 test:
 	pytest
@@ -44,6 +44,32 @@ train-q-v2:
 		--epsilon-min 0.02 \
 		--epsilon-decay 0.998 \
 		--out-dir results/q_learning_v2
+
+compare-v2:
+	python experiments/run_comparison_v2.py \
+		--q-table-path results/q_learning_v2/q_table_v2.pkl \
+		--n-cities 20 50 100 \
+		--n-instances 30 \
+		--max-steps 100 \
+		--initial-method nearest_neighbor \
+		--k-neighbors 10 \
+		--perturbation-moves 3 \
+		--reward-scale initial_length \
+		--out-dir results/comparison_v2
+
+stats-v2:
+	python experiments/statistical_tests.py \
+		--raw-path results/comparison_v2/comparison_v2_raw.csv \
+		--out-dir results/comparison_v2/stats \
+		--compare \
+			q_learning_hh_v2 random_hh_v2 \
+			q_learning_hh_v2 cycle_hh_v2 \
+			q_learning_hh_v2 always_first_2opt_v2 \
+			q_learning_hh_v2 always_random_2opt_v2 \
+			q_learning_hh_v2 always_bounded_2opt_v2 \
+			q_learning_hh_v2 always_bounded_swap_v2 \
+			q_learning_hh_v2 always_bounded_insertion_v2 \
+			q_learning_hh_v2 always_perturb_bounded_2opt_v2
 
 train-plots:
 	python experiments/plot_training.py \
