@@ -78,23 +78,35 @@ class TSPPathEnv(gym.Env):
                     shape=(1,),
                     dtype=np.int32,
                 ),
+                "current_city_onehot": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(self.n_cities,),
+                    dtype=np.float32,
+                ),
                 "visited": spaces.Box(
                     low=0,
                     high=1,
                     shape=(self.n_cities,),
-                    dtype=np.int8,
+                    dtype=np.float32,
                 ),
                 "step_count": spaces.Box(
                     low=0,
                     high=self.n_cities,
                     shape=(1,),
-                    dtype=np.int32,
+                    dtype=np.float32,
                 ),
                 "target_next_city": spaces.Box(
                     low=-1,
                     high=self.n_cities - 1,
                     shape=(1,),
                     dtype=np.int32,
+                ),
+                "target_next_city_onehot": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(self.n_cities,),
+                    dtype=np.float32,
                 ),
             }
         )
@@ -135,6 +147,9 @@ class TSPPathEnv(gym.Env):
         old_city = self.current_city
         new_city = action
 
+        # Important: compute teacher target BEFORE updating the path.
+        target = self._target_next_city_before_action()
+
         distance = self.distance_matrix[old_city, new_city]
         self.total_distance += distance
 
@@ -145,7 +160,6 @@ class TSPPathEnv(gym.Env):
 
         reward = -distance / self.distance_scale
 
-        target = self._target_next_city_before_action()
         if new_city == target:
             reward += self.teacher_bonus
 
@@ -189,14 +203,26 @@ class TSPPathEnv(gym.Env):
         return int(self.optimal_tour[next_index])
 
     def _get_obs(self) -> dict:
+        current_onehot = np.zeros(self.n_cities, dtype=np.float32)
+        current_onehot[self.current_city] = 1.0
+
+        target = self._target_next_city_before_action()
+
+        target_onehot = np.zeros(self.n_cities, dtype=np.float32)
+
+        if target >= 0:
+            target_onehot[target] = 1.0
+
         return {
             "current_city": np.array([self.current_city], dtype=np.int32),
-            "visited": self.visited.astype(np.int8),
-            "step_count": np.array([self.step_count], dtype=np.int32),
-            "target_next_city": np.array(
-                [self._target_next_city_before_action()],
-                dtype=np.int32,
+            "current_city_onehot": current_onehot,
+            "visited": self.visited.astype(np.float32),
+            "step_count": np.array(
+                [self.step_count / max(self.n_cities - 1, 1)],
+                dtype=np.float32,
             ),
+            "target_next_city": np.array([target], dtype=np.int32),
+            "target_next_city_onehot": target_onehot,
         }
 
     def _get_info(self) -> dict:

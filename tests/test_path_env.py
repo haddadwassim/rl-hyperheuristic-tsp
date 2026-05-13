@@ -35,6 +35,8 @@ def test_path_env_reset():
     assert obs["step_count"][0] == 0
     assert obs["target_next_city"][0] == 1
     assert info["path"] == [0]
+    assert obs["current_city_onehot"][0] == 1.0
+    assert obs["target_next_city_onehot"][1] == 1.0
 
 
 def test_action_mask_excludes_visited_city():
