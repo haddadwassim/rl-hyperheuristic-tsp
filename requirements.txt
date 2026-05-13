@@ -4,3 +4,6 @@ pandas
 tqdm
 pytest
 scipy
+gymnasium
+stable-baselines3
+sb3-contrib
