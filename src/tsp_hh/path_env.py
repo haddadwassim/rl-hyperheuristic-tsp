@@ -40,6 +40,7 @@ class TSPPathEnv(gym.Env):
         final_optimal_bonus: float = 10.0,
         distance_scale: float | None = None,
         max_steps: int | None = None,
+        expose_teacher: bool = True,
     ):
         super().__init__()
 
@@ -67,6 +68,8 @@ class TSPPathEnv(gym.Env):
 
         self.distance_scale = float(distance_scale)
         self.max_steps = max_steps or self.n_cities - 1
+
+        self.expose_teacher = expose_teacher
 
         self.action_space = spaces.Discrete(self.n_cities)
 
@@ -105,6 +108,24 @@ class TSPPathEnv(gym.Env):
                 "target_next_city_onehot": spaces.Box(
                     low=0,
                     high=1,
+                    shape=(self.n_cities,),
+                    dtype=np.float32,
+                ),
+                "coords": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(self.n_cities, 2),
+                    dtype=np.float32,
+                ),
+                "distance_from_current": spaces.Box(
+                    low=0,
+                    high=np.inf,
+                    shape=(self.n_cities,),
+                    dtype=np.float32,
+                ),
+                "distance_to_start": spaces.Box(
+                    low=0,
+                    high=np.inf,
                     shape=(self.n_cities,),
                     dtype=np.float32,
                 ),
@@ -206,12 +227,29 @@ class TSPPathEnv(gym.Env):
         current_onehot = np.zeros(self.n_cities, dtype=np.float32)
         current_onehot[self.current_city] = 1.0
 
-        target = self._target_next_city_before_action()
+        true_target = self._target_next_city_before_action()
+        target = true_target if self.expose_teacher else -1
 
         target_onehot = np.zeros(self.n_cities, dtype=np.float32)
 
+        if self.expose_teacher and target >= 0:
+            target_onehot[target] = 1.0
+
         if target >= 0:
             target_onehot[target] = 1.0
+
+        coords_min = np.min(self.coords, axis=0)
+        coords_max = np.max(self.coords, axis=0)
+        coords_range = np.maximum(coords_max - coords_min, 1e-12)
+        coords_norm = (self.coords - coords_min) / coords_range
+
+        distance_from_current = (
+            self.distance_matrix[self.current_city] / self.distance_scale
+        ).astype(np.float32)
+
+        distance_to_start = (
+            self.distance_matrix[:, self.start_city] / self.distance_scale
+        ).astype(np.float32)
 
         return {
             "current_city": np.array([self.current_city], dtype=np.int32),
@@ -223,6 +261,9 @@ class TSPPathEnv(gym.Env):
             ),
             "target_next_city": np.array([target], dtype=np.int32),
             "target_next_city_onehot": target_onehot,
+            "coords": coords_norm.astype(np.float32),
+            "distance_from_current": distance_from_current,
+            "distance_to_start": distance_to_start,
         }
 
     def _get_info(self) -> dict:
