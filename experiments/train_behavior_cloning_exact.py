@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
+import time
 
 from tsp_hh.instances import generate_euclidean_instance
 from tsp_hh.exact_tsp import held_karp_optimal_tour
@@ -260,6 +261,8 @@ def evaluate_rollouts(
     rows = []
 
     for meta in metas:
+        start_time = time.perf_counter()
+
         path, length = rollout_policy(
             model=model,
             coords=meta["coords"],
@@ -275,6 +278,8 @@ def evaluate_rollouts(
                 max_iterations=two_opt_iterations,
             )
 
+        runtime_sec = time.perf_counter() - start_time
+
         optimal_length = meta["optimal_length"]
         gap = (length - optimal_length) / optimal_length * 100.0
 
@@ -288,10 +293,13 @@ def evaluate_rollouts(
                 "predicted_path": path,
                 "optimal_tour": meta["optimal_tour"],
                 "repair_2opt": repair_2opt,
+                "runtime_sec": runtime_sec,
+                "runtime_ms": runtime_sec * 1000.0,
             }
         )
 
     return pd.DataFrame(rows)
+
 
 def parse_seed_range(text: str) -> list[int]:
     """
@@ -330,6 +338,8 @@ def evaluate_constructive_baseline(
         distance_matrix = meta["distance_matrix"]
         optimal_length = meta["optimal_length"]
 
+        start_time = time.perf_counter()
+
         tour = construct_tour_v3(
             distance_matrix=distance_matrix,
             method=method,
@@ -345,6 +355,8 @@ def evaluate_constructive_baseline(
             )
 
         length = tour_length(np.asarray(tour), distance_matrix)
+        runtime_sec = time.perf_counter() - start_time
+
         gap = (length - optimal_length) / optimal_length * 100.0
 
         tour_list = list(map(int, tour))
@@ -360,16 +372,17 @@ def evaluate_constructive_baseline(
                 "predicted_path": tour_list,
                 "optimal_tour": meta["optimal_tour"],
                 "repair_2opt": repair_2opt,
+                "runtime_sec": runtime_sec,
+                "runtime_ms": runtime_sec * 1000.0,
             }
         )
 
     return pd.DataFrame(rows)
 
-
 def print_method_summary(name: str, df: pd.DataFrame) -> None:
     print(f"\n{name} summary:")
     print(
-        df[["gap_percent", "exact_path"]]
+        df[["gap_percent", "exact_path", "runtime_ms"]]
         .describe(include="all")
         .to_string()
     )
@@ -380,7 +393,8 @@ def print_method_summary(name: str, df: pd.DataFrame) -> None:
         f"median_gap={df['gap_percent'].median():.3f}% | "
         f"best_gap={df['gap_percent'].min():.3f}% | "
         f"worst_gap={df['gap_percent'].max():.3f}% | "
-        f"exact_rate={df['exact_path'].mean():.3f}"
+        f"exact_rate={df['exact_path'].mean():.3f} | "
+        f"mean_runtime_ms={df['runtime_ms'].mean():.3f}"
     )
 
 
@@ -557,6 +571,7 @@ def main():
             "best_gap": test_eval["gap_percent"].min(),
             "worst_gap": test_eval["gap_percent"].max(),
             "exact_rate": test_eval["exact_path"].mean(),
+            "mean_runtime_ms": test_eval["runtime_ms"].mean(),
         },
         {
             "method": "bc_policy_2opt",
@@ -565,6 +580,7 @@ def main():
             "best_gap": test_eval_2opt["gap_percent"].min(),
             "worst_gap": test_eval_2opt["gap_percent"].max(),
             "exact_rate": test_eval_2opt["exact_path"].mean(),
+            "mean_runtime_ms": test_eval_2opt["runtime_ms"].mean(),
         },
         {
             "method": "nearest_neighbor",
@@ -573,6 +589,7 @@ def main():
             "best_gap": nn_eval["gap_percent"].min(),
             "worst_gap": nn_eval["gap_percent"].max(),
             "exact_rate": nn_eval["exact_path"].mean(),
+            "mean_runtime_ms": nn_eval["runtime_ms"].mean(),
         },
         {
             "method": "nearest_neighbor_2opt",
@@ -581,6 +598,7 @@ def main():
             "best_gap": nn_2opt_eval["gap_percent"].min(),
             "worst_gap": nn_2opt_eval["gap_percent"].max(),
             "exact_rate": nn_2opt_eval["exact_path"].mean(),
+            "mean_runtime_ms": nn_2opt_eval["runtime_ms"].mean(),
         },
         {
             "method": "greedy_multi_start_nn",
@@ -589,6 +607,7 @@ def main():
             "best_gap": greedy_eval["gap_percent"].min(),
             "worst_gap": greedy_eval["gap_percent"].max(),
             "exact_rate": greedy_eval["exact_path"].mean(),
+            "mean_runtime_ms": greedy_eval["runtime_ms"].mean(),
         },
         {
             "method": "greedy_multi_start_nn_2opt",
@@ -597,6 +616,7 @@ def main():
             "best_gap": greedy_2opt_eval["gap_percent"].min(),
             "worst_gap": greedy_2opt_eval["gap_percent"].max(),
             "exact_rate": greedy_2opt_eval["exact_path"].mean(),
+            "mean_runtime_ms": greedy_2opt_eval["runtime_ms"].mean(),
         },
         {
             "method": "random",
@@ -605,6 +625,7 @@ def main():
             "best_gap": random_eval["gap_percent"].min(),
             "worst_gap": random_eval["gap_percent"].max(),
             "exact_rate": random_eval["exact_path"].mean(),
+            "mean_runtime_ms": random_eval["runtime_ms"].mean(),
         },
     ]
 
