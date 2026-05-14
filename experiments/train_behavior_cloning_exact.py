@@ -1,4 +1,5 @@
 import argparse
+import time
 from pathlib import Path
 
 import numpy as np
@@ -6,13 +7,20 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-import time
 
 from tsp_hh.instances import generate_euclidean_instance
 from tsp_hh.exact_tsp import held_karp_optimal_tour
 from tsp_hh.tour import tour_length
 from tsp_hh.bc_policy import NextCityPolicy
-from tsp_hh.heuristics_v3 import construct_tour_v3, two_opt_local_search_limited
+from tsp_hh.heuristics_v3 import (
+    construct_tour_v3,
+    two_opt_local_search_limited,
+)
+
+
+# ============================================================
+# Data / feature utilities
+# ============================================================
 
 def normalize_coords(coords: np.ndarray) -> np.ndarray:
     coords = np.asarray(coords, dtype=np.float32)
@@ -37,7 +45,15 @@ def build_candidate_features(
     visited: np.ndarray,
 ) -> np.ndarray:
     """
-    Build one feature matrix of shape (n_cities, feature_dim).
+    Build candidate-level features.
+
+    For each candidate city i:
+      - candidate coordinates
+      - current city coordinates
+      - start city coordinates
+      - distance(current, i)
+      - distance(i, start)
+      - visited flag
     """
     n_cities = coords.shape[0]
 
@@ -66,6 +82,10 @@ def build_candidate_features(
 
     return features.astype(np.float32)
 
+
+# ============================================================
+# Exact data generation
+# ============================================================
 
 def build_examples_for_instance(
     n_cities: int,
@@ -150,6 +170,10 @@ def build_dataset(
     return dataset, metas
 
 
+# ============================================================
+# Training utilities
+# ============================================================
+
 def masked_cross_entropy(
     logits: torch.Tensor,
     valid_mask: torch.Tensor,
@@ -188,6 +212,10 @@ def evaluate_next_city_accuracy(
 
     return correct / max(total, 1)
 
+
+# ============================================================
+# Rollout / repair
+# ============================================================
 
 @torch.no_grad()
 def rollout_policy(
@@ -234,6 +262,7 @@ def rollout_policy(
 
     return path, float(length)
 
+
 def repair_tour_with_2opt(
     path: list[int],
     distance_matrix: np.ndarray,
@@ -250,8 +279,9 @@ def repair_tour_with_2opt(
 
     return repaired_path, float(repaired_length)
 
+
 @torch.no_grad()
-def evaluate_rollouts(
+def evaluate_bc_policy(
     model: NextCityPolicy,
     metas: list[dict],
     device: torch.device,
@@ -286,19 +316,104 @@ def evaluate_rollouts(
         rows.append(
             {
                 "seed": meta["seed"],
+                "method": "bc_policy_2opt" if repair_2opt else "bc_policy",
                 "optimal_length": optimal_length,
                 "predicted_length": length,
                 "gap_percent": gap,
                 "exact_path": path == meta["optimal_tour"],
                 "predicted_path": path,
                 "optimal_tour": meta["optimal_tour"],
-                "repair_2opt": repair_2opt,
                 "runtime_sec": runtime_sec,
                 "runtime_ms": runtime_sec * 1000.0,
             }
         )
 
     return pd.DataFrame(rows)
+
+
+def evaluate_constructive_baseline(
+    metas: list[dict],
+    method: str,
+    repair_2opt: bool = False,
+    two_opt_iterations: int = 50,
+) -> pd.DataFrame:
+    rows = []
+
+    method_name = f"{method}_2opt" if repair_2opt else method
+
+    for meta in metas:
+        seed = meta["seed"]
+        distance_matrix = meta["distance_matrix"]
+        optimal_length = meta["optimal_length"]
+
+        start_time = time.perf_counter()
+
+        tour = construct_tour_v3(
+            distance_matrix=distance_matrix,
+            method=method,
+            seed=seed,
+            n_starts=1,
+        )
+
+        if repair_2opt:
+            tour, _, _ = two_opt_local_search_limited(
+                np.asarray(tour, dtype=int),
+                distance_matrix,
+                max_iterations=two_opt_iterations,
+            )
+
+        length = tour_length(np.asarray(tour), distance_matrix)
+        runtime_sec = time.perf_counter() - start_time
+
+        gap = (length - optimal_length) / optimal_length * 100.0
+        tour_list = list(map(int, tour))
+
+        rows.append(
+            {
+                "seed": seed,
+                "method": method_name,
+                "optimal_length": optimal_length,
+                "predicted_length": length,
+                "gap_percent": gap,
+                "exact_path": tour_list == meta["optimal_tour"],
+                "predicted_path": tour_list,
+                "optimal_tour": meta["optimal_tour"],
+                "runtime_sec": runtime_sec,
+                "runtime_ms": runtime_sec * 1000.0,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+# ============================================================
+# Reporting
+# ============================================================
+
+def summarize_method(df: pd.DataFrame, method_name: str) -> dict:
+    return {
+        "method": method_name,
+        "mean_gap": df["gap_percent"].mean(),
+        "median_gap": df["gap_percent"].median(),
+        "best_gap": df["gap_percent"].min(),
+        "worst_gap": df["gap_percent"].max(),
+        "exact_rate": df["exact_path"].mean(),
+        "mean_runtime_ms": df["runtime_ms"].mean(),
+    }
+
+
+def print_method_summary(name: str, df: pd.DataFrame) -> None:
+    row = summarize_method(df, name)
+
+    print(
+        f"{name:24s} | "
+        f"mean_gap={row['mean_gap']:.3f}% | "
+        f"median_gap={row['median_gap']:.3f}% | "
+        f"best_gap={row['best_gap']:.3f}% | "
+        f"worst_gap={row['worst_gap']:.3f}% | "
+        f"exact_rate={row['exact_rate']:.3f} | "
+        f"mean_runtime_ms={row['mean_runtime_ms']:.3f}"
+    )
 
 
 def parse_seed_range(text: str) -> list[int]:
@@ -315,88 +430,10 @@ def parse_seed_range(text: str) -> list[int]:
 
     return [int(x.strip()) for x in text.split(",") if x.strip()]
 
-def evaluate_constructive_baseline(
-    metas: list[dict],
-    method: str,
-    n_starts: int = 10,
-    repair_2opt: bool = False,
-    two_opt_iterations: int = 50,
-) -> pd.DataFrame:
-    """
-    Evaluate simple constructive baselines on exact-instance metas.
 
-    Supported methods:
-    - nearest_neighbor
-    - greedy
-    - random
-    """
-    rows = []
-
-    for meta in metas:
-        seed = meta["seed"]
-        coords = meta["coords"]
-        distance_matrix = meta["distance_matrix"]
-        optimal_length = meta["optimal_length"]
-
-        start_time = time.perf_counter()
-
-        tour = construct_tour_v3(
-            distance_matrix=distance_matrix,
-            method=method,
-            seed=seed,
-            n_starts=n_starts,
-        )
-
-        if repair_2opt:
-            tour, _, _ = two_opt_local_search_limited(
-                np.asarray(tour, dtype=int),
-                distance_matrix,
-                max_iterations=two_opt_iterations,
-            )
-
-        length = tour_length(np.asarray(tour), distance_matrix)
-        runtime_sec = time.perf_counter() - start_time
-
-        gap = (length - optimal_length) / optimal_length * 100.0
-
-        tour_list = list(map(int, tour))
-
-        rows.append(
-            {
-                "seed": seed,
-                "method": method,
-                "optimal_length": optimal_length,
-                "predicted_length": length,
-                "gap_percent": gap,
-                "exact_path": tour_list == meta["optimal_tour"],
-                "predicted_path": tour_list,
-                "optimal_tour": meta["optimal_tour"],
-                "repair_2opt": repair_2opt,
-                "runtime_sec": runtime_sec,
-                "runtime_ms": runtime_sec * 1000.0,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-def print_method_summary(name: str, df: pd.DataFrame) -> None:
-    print(f"\n{name} summary:")
-    print(
-        df[["gap_percent", "exact_path", "runtime_ms"]]
-        .describe(include="all")
-        .to_string()
-    )
-
-    print(
-        f"{name} | "
-        f"mean_gap={df['gap_percent'].mean():.3f}% | "
-        f"median_gap={df['gap_percent'].median():.3f}% | "
-        f"best_gap={df['gap_percent'].min():.3f}% | "
-        f"worst_gap={df['gap_percent'].max():.3f}% | "
-        f"exact_rate={df['exact_path'].mean():.3f} | "
-        f"mean_runtime_ms={df['runtime_ms'].mean():.3f}"
-    )
-
+# ============================================================
+# Main
+# ============================================================
 
 def main():
     parser = argparse.ArgumentParser()
@@ -405,16 +442,15 @@ def main():
     parser.add_argument("--train-seeds", type=str, default="42:542")
     parser.add_argument("--test-seeds", type=str, default="1000:1100")
 
-    parser.add_argument("--baseline-greedy-starts", type=int, default=10)
-    parser.add_argument("--two-opt-repair-iterations", type=int, default=50)
-
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
 
-    parser.add_argument("--out-dir", type=str, default="results/behavior_cloning_exact")
+    parser.add_argument("--two-opt-repair-iterations", type=int, default=50)
+
+    parser.add_argument("--out-dir", type=str, default="results/behavior_cloning_exact_clean")
 
     args = parser.parse_args()
 
@@ -475,18 +511,21 @@ def main():
         train_acc = evaluate_next_city_accuracy(model, train_dataset, device)
         test_acc = evaluate_next_city_accuracy(model, test_dataset, device)
 
-        train_rollouts = evaluate_rollouts(model, train_metas[:50], device, repair_2opt=False)
-        test_rollouts = evaluate_rollouts(model, test_metas, device, repair_2opt=False)
+        # Raw BC rollout only during training, for fast progress tracking.
+        test_rollout = evaluate_bc_policy(
+            model=model,
+            metas=test_metas,
+            device=device,
+            repair_2opt=False,
+        )
 
         row = {
             "epoch": epoch,
             "loss": total_loss / max(n_batches, 1),
             "train_next_city_acc": train_acc,
             "test_next_city_acc": test_acc,
-            "train_mean_gap": train_rollouts["gap_percent"].mean(),
-            "test_mean_gap": test_rollouts["gap_percent"].mean(),
-            "train_exact_rate": train_rollouts["exact_path"].mean(),
-            "test_exact_rate": test_rollouts["exact_path"].mean(),
+            "test_raw_mean_gap": test_rollout["gap_percent"].mean(),
+            "test_raw_exact_rate": test_rollout["exact_path"].mean(),
         }
 
         logs.append(row)
@@ -496,48 +535,26 @@ def main():
             f"loss={row['loss']:.4f} | "
             f"train_acc={train_acc:.3f} | "
             f"test_acc={test_acc:.3f} | "
-            f"train_gap={row['train_mean_gap']:.2f}% | "
-            f"test_gap={row['test_mean_gap']:.2f}% | "
-            f"test_exact={row['test_exact_rate']:.3f}"
+            f"raw_gap={row['test_raw_mean_gap']:.2f}% | "
+            f"raw_exact={row['test_raw_exact_rate']:.3f}"
         )
 
-    log_df = pd.DataFrame(logs)
-    train_eval = evaluate_rollouts(model, train_metas, device, repair_2opt=False)
-    test_eval = evaluate_rollouts(model, test_metas, device, repair_2opt=False)
-    test_eval_2opt = evaluate_rollouts(model, test_metas, device, repair_2opt=True, two_opt_iterations=args.two_opt_repair_iterations)
-
+    # Save model and training log.
     torch.save(model.state_dict(), out_dir / "bc_policy.pt")
+    pd.DataFrame(logs).to_csv(out_dir / "training_log.csv", index=False)
 
-    log_df.to_csv(out_dir / "training_log.csv", index=False)
-    train_eval.to_csv(out_dir / "train_rollout_eval.csv", index=False)
-    test_eval.to_csv(out_dir / "test_rollout_eval.csv", index=False)
-    test_eval_2opt.to_csv(out_dir / "test_rollout_2opt_eval.csv", index=False)
-    nn_eval = evaluate_constructive_baseline(
+    # Final evaluation.
+    bc_eval = evaluate_bc_policy(
+        model=model,
         metas=test_metas,
-        method="nearest_neighbor",
-        n_starts=args.baseline_greedy_starts,
+        device=device,
         repair_2opt=False,
     )
 
-    nn_2opt_eval = evaluate_constructive_baseline(
+    bc_2opt_eval = evaluate_bc_policy(
+        model=model,
         metas=test_metas,
-        method="nearest_neighbor",
-        n_starts=args.baseline_greedy_starts,
-        repair_2opt=True,
-        two_opt_iterations=args.two_opt_repair_iterations,
-    )
-
-    greedy_eval = evaluate_constructive_baseline(
-        metas=test_metas,
-        method="greedy",
-        n_starts=args.baseline_greedy_starts,
-        repair_2opt=False,
-    )
-
-    greedy_2opt_eval = evaluate_constructive_baseline(
-        metas=test_metas,
-        method="greedy",
-        n_starts=args.baseline_greedy_starts,
+        device=device,
         repair_2opt=True,
         two_opt_iterations=args.two_opt_repair_iterations,
     )
@@ -545,88 +562,43 @@ def main():
     random_eval = evaluate_constructive_baseline(
         metas=test_metas,
         method="random",
-        n_starts=args.baseline_greedy_starts,
         repair_2opt=False,
     )
 
-    print_method_summary("BC policy test rollout", test_eval)
-    print_method_summary("BC policy + 2-opt repair", test_eval_2opt)
-    print_method_summary("Nearest Neighbor baseline", nn_eval)
-    print_method_summary("Nearest Neighbor + 2-opt baseline", nn_2opt_eval)
-    print_method_summary("Greedy multi-start NN baseline", greedy_eval)
-    print_method_summary("Greedy multi-start NN + 2-opt baseline", greedy_2opt_eval)
-    print_method_summary("Random baseline", random_eval)
+    nn_eval = evaluate_constructive_baseline(
+        metas=test_metas,
+        method="nearest_neighbor",
+        repair_2opt=False,
+    )
 
-    nn_eval.to_csv(out_dir / "test_nearest_neighbor_eval.csv", index=False)
-    nn_2opt_eval.to_csv(out_dir / "test_nearest_neighbor_2opt_eval.csv", index=False)
-    greedy_eval.to_csv(out_dir / "test_greedy_eval.csv", index=False)
-    greedy_2opt_eval.to_csv(out_dir / "test_greedy_2opt_eval.csv", index=False)
-    random_eval.to_csv(out_dir / "test_random_eval.csv", index=False)
+    nn_2opt_eval = evaluate_constructive_baseline(
+        metas=test_metas,
+        method="nearest_neighbor",
+        repair_2opt=True,
+        two_opt_iterations=args.two_opt_repair_iterations,
+    )
+
+    # Save detailed evaluations.
+    bc_eval.to_csv(out_dir / "test_bc_policy.csv", index=False)
+    bc_2opt_eval.to_csv(out_dir / "test_bc_policy_2opt.csv", index=False)
+    random_eval.to_csv(out_dir / "test_random.csv", index=False)
+    nn_eval.to_csv(out_dir / "test_nearest_neighbor.csv", index=False)
+    nn_2opt_eval.to_csv(out_dir / "test_nearest_neighbor_2opt.csv", index=False)
+
+    # Print clean summaries.
+    print("\nFinal method summaries:")
+    print_method_summary("bc_policy", bc_eval)
+    print_method_summary("bc_policy_2opt", bc_2opt_eval)
+    print_method_summary("random", random_eval)
+    print_method_summary("nearest_neighbor", nn_eval)
+    print_method_summary("nearest_neighbor_2opt", nn_2opt_eval)
 
     comparison_rows = [
-        {
-            "method": "bc_policy",
-            "mean_gap": test_eval["gap_percent"].mean(),
-            "median_gap": test_eval["gap_percent"].median(),
-            "best_gap": test_eval["gap_percent"].min(),
-            "worst_gap": test_eval["gap_percent"].max(),
-            "exact_rate": test_eval["exact_path"].mean(),
-            "mean_runtime_ms": test_eval["runtime_ms"].mean(),
-        },
-        {
-            "method": "bc_policy_2opt",
-            "mean_gap": test_eval_2opt["gap_percent"].mean(),
-            "median_gap": test_eval_2opt["gap_percent"].median(),
-            "best_gap": test_eval_2opt["gap_percent"].min(),
-            "worst_gap": test_eval_2opt["gap_percent"].max(),
-            "exact_rate": test_eval_2opt["exact_path"].mean(),
-            "mean_runtime_ms": test_eval_2opt["runtime_ms"].mean(),
-        },
-        {
-            "method": "nearest_neighbor",
-            "mean_gap": nn_eval["gap_percent"].mean(),
-            "median_gap": nn_eval["gap_percent"].median(),
-            "best_gap": nn_eval["gap_percent"].min(),
-            "worst_gap": nn_eval["gap_percent"].max(),
-            "exact_rate": nn_eval["exact_path"].mean(),
-            "mean_runtime_ms": nn_eval["runtime_ms"].mean(),
-        },
-        {
-            "method": "nearest_neighbor_2opt",
-            "mean_gap": nn_2opt_eval["gap_percent"].mean(),
-            "median_gap": nn_2opt_eval["gap_percent"].median(),
-            "best_gap": nn_2opt_eval["gap_percent"].min(),
-            "worst_gap": nn_2opt_eval["gap_percent"].max(),
-            "exact_rate": nn_2opt_eval["exact_path"].mean(),
-            "mean_runtime_ms": nn_2opt_eval["runtime_ms"].mean(),
-        },
-        {
-            "method": "greedy_multi_start_nn",
-            "mean_gap": greedy_eval["gap_percent"].mean(),
-            "median_gap": greedy_eval["gap_percent"].median(),
-            "best_gap": greedy_eval["gap_percent"].min(),
-            "worst_gap": greedy_eval["gap_percent"].max(),
-            "exact_rate": greedy_eval["exact_path"].mean(),
-            "mean_runtime_ms": greedy_eval["runtime_ms"].mean(),
-        },
-        {
-            "method": "greedy_multi_start_nn_2opt",
-            "mean_gap": greedy_2opt_eval["gap_percent"].mean(),
-            "median_gap": greedy_2opt_eval["gap_percent"].median(),
-            "best_gap": greedy_2opt_eval["gap_percent"].min(),
-            "worst_gap": greedy_2opt_eval["gap_percent"].max(),
-            "exact_rate": greedy_2opt_eval["exact_path"].mean(),
-            "mean_runtime_ms": greedy_2opt_eval["runtime_ms"].mean(),
-        },
-        {
-            "method": "random",
-            "mean_gap": random_eval["gap_percent"].mean(),
-            "median_gap": random_eval["gap_percent"].median(),
-            "best_gap": random_eval["gap_percent"].min(),
-            "worst_gap": random_eval["gap_percent"].max(),
-            "exact_rate": random_eval["exact_path"].mean(),
-            "mean_runtime_ms": random_eval["runtime_ms"].mean(),
-        },
+        summarize_method(bc_eval, "bc_policy"),
+        summarize_method(bc_2opt_eval, "bc_policy_2opt"),
+        summarize_method(random_eval, "random"),
+        summarize_method(nn_eval, "nearest_neighbor"),
+        summarize_method(nn_2opt_eval, "nearest_neighbor_2opt"),
     ]
 
     comparison_df = pd.DataFrame(comparison_rows)
@@ -636,8 +608,6 @@ def main():
     print(comparison_df.to_string(index=False))
 
     print(f"\nSaved model and results to: {out_dir}")
-
-
 
 
 if __name__ == "__main__":
