@@ -47,7 +47,7 @@ operators:
 agent:
   algorithm: "DQN"
   policy: "MlpPolicy"
-  total_timesteps: 100000
+  total_timesteps: 2000
   learning_rate: 0.0001
   buffer_size: 100000
   learning_starts: 1000
