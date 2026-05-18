@@ -45,6 +45,11 @@ class TSPOperatorEnv(gym.Env):
         self.no_improvement_penalty = env_config.get("no_improvement_penalty", 0.001)
         self.stop_bonus_weight = env_config.get("stop_bonus_weight", 1.0)
 
+        self.stop_time_bonus_weight = env_config.get("stop_time_bonus_weight", 0.05)
+        self.early_stop_no_improvement_penalty = env_config.get(
+            "early_stop_no_improvement_penalty", 0.01
+        )
+
         self.seed_value = config.get("project", {}).get("seed", None)
         self.rng = np.random.default_rng(self.seed_value)
 
@@ -134,13 +139,16 @@ class TSPOperatorEnv(gym.Env):
             self.current_length = self.best_length
 
             final_improvement = (self.initial_length - self.best_length) / self.initial_length
+            remaining_budget_fraction = 1.0 - (self.current_step / max(1, self.max_steps))
 
-            # STOP should be good if the agent already obtained a good solution,
-            # but stopping immediately should not be attractive.
-            reward = self.stop_bonus_weight * final_improvement
+            reward = (
+                self.stop_bonus_weight * final_improvement
+                + self.stop_time_bonus_weight * remaining_budget_fraction * final_improvement
+            )
 
-            if self.current_step == 0:
-                reward -= self.no_improvement_penalty
+            # Prevent the trivial policy that stops immediately without improving.
+            if final_improvement <= 1e-12:
+                reward -= self.early_stop_no_improvement_penalty
 
             self.last_improvement = 0.0
 
