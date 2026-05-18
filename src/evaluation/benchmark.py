@@ -199,7 +199,9 @@ def summarize_benchmark(df: pd.DataFrame) -> pd.DataFrame:
             mean_relative_improvement=("relative_improvement", "mean"),
             std_relative_improvement=("relative_improvement", "std"),
             mean_num_steps=("num_steps", "mean"),
+            std_num_steps=("num_steps", "std"),
             mean_runtime_sec=("runtime_sec", "mean"),
+            std_runtime_sec=("runtime_sec", "std"),
         )
         .reset_index()
     )

@@ -27,12 +27,15 @@ def plot_bar(
     ylabel: str,
     title: str,
     output_path: str,
+    yerr_col: str | None = None,
 ):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    yerr = df[yerr_col] if yerr_col is not None and yerr_col in df.columns else None
+
     plt.figure(figsize=(10, 5))
-    plt.bar(df["label"], df[y_col])
+    plt.bar(df["label"], df[y_col], yerr=yerr, capsize=4)
     plt.ylabel(ylabel)
     plt.title(title)
     plt.xticks(rotation=25, ha="right")
@@ -139,6 +142,7 @@ def main():
     plot_bar(
         df=df,
         y_col="mean_relative_improvement",
+        yerr_col="std_relative_improvement",
         ylabel="Mean relative improvement",
         title="Solution improvement by method",
         output_path=output_dir / "mean_relative_improvement.png",
@@ -147,6 +151,7 @@ def main():
     plot_bar(
         df=df,
         y_col="mean_num_steps",
+        yerr_col="std_num_steps",
         ylabel="Mean number of operator steps",
         title="Search effort by method",
         output_path=output_dir / "mean_num_steps.png",
@@ -155,6 +160,7 @@ def main():
     plot_bar(
         df=df,
         y_col="mean_runtime_sec",
+        yerr_col="std_runtime_sec",
         ylabel="Mean runtime (seconds)",
         title="Runtime by method",
         output_path=output_dir / "mean_runtime.png",
