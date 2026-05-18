@@ -1,7 +1,7 @@
 project:
-  name: "drl_tsp_operator_selector"
+  name: "drl_tsp_operator_selector_efficiency"
   seed: 42
-  output_dir: "results/run_100k_stop_reward"
+  output_dir: "results/run_100k_efficiency_stop"
 
 tsp:
   train_distribution: "uniform"
@@ -16,11 +16,11 @@ initial_solution:
 
 environment:
   max_steps: 100
-  step_penalty: 0.001
+  step_penalty: 0.003
   stop_bonus_weight: 1.0
-  stop_time_bonus_weight: 0.05
-  early_stop_no_improvment_penalty: 0.01
-  no_improvement_penalty: 0.001
+  stop_time_bonus_weight: 0.20
+  early_stop_no_improvment_penalty: 0.02
+  no_improvement_penalty: 0.003
   normalize_observation: true
 
 operators:
