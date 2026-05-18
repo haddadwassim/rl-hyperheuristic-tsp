@@ -1,9 +1,34 @@
-numpy
-matplotlib
-pandas
-tqdm
-pytest
-scipy
-gymnasium
-stable-baselines3
-sb3-contrib
+# Core numerical stack
+numpy>=1.26.0
+scipy>=1.11.0
+pandas>=2.1.0
+
+# Reinforcement learning
+gymnasium>=0.29.1
+stable-baselines3>=2.3.0
+
+# Deep learning backend
+torch>=2.1.0
+
+# Configuration
+PyYAML>=6.0.1
+
+# Plotting and analysis
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Progress bars and utilities
+tqdm>=4.66.0
+
+# Experiment tracking / logging
+tensorboard>=2.15.0
+
+# Optional: graph and geometry utilities
+networkx>=3.2.0
+
+# Optional: Jupyter notebooks
+notebook>=7.0.0
+ipykernel>=6.25.0
+
+# Testing
+pytest>=7.4.0

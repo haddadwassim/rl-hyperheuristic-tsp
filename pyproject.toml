@@ -1,15 +1,9 @@
 [project]
-name = "tsp-hh"
+name = "rl-hyperheuristic-tsp"
 version = "0.1.0"
-description = "Adaptive reinforcement learning hyper-heuristic for the Traveling Salesman Problem"
+description = "DRL-guided adaptive local search for the Traveling Salesman Problem"
 requires-python = ">=3.10"
-dependencies = [
-    "numpy",
-    "matplotlib",
-    "pandas",
-    "tqdm",
-    "scipy"
-]
 
-[tool.pytest.ini_options]
-pythonpath = ["src"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

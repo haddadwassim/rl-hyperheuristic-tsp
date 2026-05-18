@@ -1,0 +1,80 @@
+project:
+  name: "drl_tsp_operator_selector"
+  seed: 42
+  output_dir: "results"
+
+tsp:
+  train_distribution: "uniform"
+  train_num_nodes: 50
+  eval_num_nodes: [50, 100]
+  num_train_instances: 10000
+  num_eval_instances: 200
+  coordinate_range: [0.0, 1.0]
+
+initial_solution:
+  method: "nearest_neighbor"
+
+environment:
+  max_steps: 100
+  step_penalty: 0.001
+  stop_bonus_weight: 1.0
+  no_improvement_penalty: 0.001
+  normalize_observation: true
+
+operators:
+  enabled:
+    - "two_opt"
+    - "swap"
+    - "relocate"
+    - "perturb_two_opt"
+
+  two_opt:
+    mode: "best_improvement"
+    max_trials: 200
+
+  swap:
+    mode: "best_improvement"
+    max_trials: 200
+
+  relocate:
+    mode: "best_improvement"
+    max_trials: 200
+
+  perturb_two_opt:
+    perturb_strength: 3
+    two_opt_trials: 100
+
+agent:
+  algorithm: "DQN"
+  policy: "MlpPolicy"
+  total_timesteps: 100000
+  learning_rate: 0.0001
+  buffer_size: 100000
+  learning_starts: 1000
+  batch_size: 64
+  gamma: 0.99
+  train_freq: 4
+  gradient_steps: 1
+  target_update_interval: 1000
+  exploration_initial_eps: 1.0
+  exploration_final_eps: 0.05
+  exploration_fraction: 0.2
+
+evaluation:
+  num_episodes: 100
+  deterministic: true
+  compare_baselines: true
+  save_plots: true
+
+baselines:
+  nearest_neighbor: true
+  nearest_neighbor_two_opt: true
+  random_operator: true
+  fixed_schedule: true
+  simulated_annealing: false
+  genetic_algorithm: false
+
+logging:
+  tensorboard: true
+  verbose: 1
+  save_model_every: 10000
