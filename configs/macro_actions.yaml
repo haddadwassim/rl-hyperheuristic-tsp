@@ -1,0 +1,71 @@
+project:
+  name: "drl_tsp_macro_actions"
+  seed: 42
+  output_dir: "results/run_5k_macro_multi_perturb_test"
+
+environment:
+  max_steps: 30
+  reward_scale: 10.0
+  stop_reward_weight: 1.0
+  stop_time_bonus_weight: 0.2
+  early_stop_no_improvement_penalty: 0.05
+  restore_best_on_failure: true
+  normalize_observation: true
+
+action_costs:
+  stop: 0.0
+  sampled_two_opt: 0.05
+  swap: 0.05
+  relocate: 0.05
+  perturb_sampled_two_opt: 0.08
+  full_two_opt: 0.10
+  multi_perturb_full_two_opt: 0.18  
+
+operators:
+  enabled:
+    - "sampled_two_opt"
+    - "swap"
+    - "relocate"
+    - "perturb_sampled_two_opt"
+    - "full_two_opt"
+    - "perturb_full_two_opt"
+
+  two_opt:
+    mode: "best_improvement"
+    max_trials: 200
+
+  swap:
+    mode: "best_improvement"
+    max_trials: 200
+
+  relocate:
+    mode: "best_improvement"
+    max_trials: 200
+
+  perturb_two_opt:
+    perturb_strength: 1
+    two_opt_trials: 100
+
+  full_two_opt:
+    max_passes: 1000
+
+  multi_perturb_full_two_opt:
+    perturb_strength: 1
+    num_trials: 3
+    max_passes: 1000
+
+agent:
+  algorithm: "DQN"
+  policy: "MlpPolicy"
+  total_timesteps: 5000
+  learning_rate: 0.0001
+  buffer_size: 100000
+  learning_starts: 100
+  batch_size: 64
+  gamma: 0.99
+  train_freq: 4
+  gradient_steps: 1
+  target_update_interval: 1000
+  exploration_initial_eps: 1.0
+  exploration_final_eps: 0.05
+  exploration_fraction: 0.2

@@ -41,14 +41,18 @@ class TSPOperatorEnv(gym.Env):
         self.initial_solution_method = init_config.get("method", "nearest_neighbor")
 
         self.max_steps = env_config.get("max_steps", 100)
-        self.step_penalty = env_config.get("step_penalty", 0.001)
-        self.no_improvement_penalty = env_config.get("no_improvement_penalty", 0.001)
-        self.stop_bonus_weight = env_config.get("stop_bonus_weight", 1.0)
 
-        self.stop_time_bonus_weight = env_config.get("stop_time_bonus_weight", 0.05)
+        self.stop_time_bonus_weight = env_config.get("stop_time_bonus_weight", 0.2)
+        
+        self.reward_scale = env_config.get("reward_scale", 10.0)
+        self.stop_reward_weight = env_config.get("stop_reward_weight", 0.2)
         self.early_stop_no_improvement_penalty = env_config.get(
-            "early_stop_no_improvement_penalty", 0.01
+            "early_stop_no_improvement_penalty", 0.05
         )
+        self.restore_best_on_failure = env_config.get("restore_best_on_failure", True)
+
+        self.action_costs = config.get("action_costs", {})
+
 
         self.seed_value = config.get("project", {}).get("seed", None)
         self.rng = np.random.default_rng(self.seed_value)
@@ -121,34 +125,41 @@ class TSPOperatorEnv(gym.Env):
         info = self._get_info()
         return observation, info
 
+
     def step(self, action: int):
         action = int(action)
 
         if action < 0 or action >= num_actions():
             raise ValueError(f"Invalid action: {action}")
 
-        old_length = self.current_length
+        action_label = action_name(action)
+
         terminated = False
         truncated = False
 
-        if action_name(action) == "stop":
+        old_best_length = self.best_length
+
+        if action_label == "stop":
             terminated = True
 
             # Return the best solution found during the episode.
             self.current_tour = self.best_tour.copy()
             self.current_length = self.best_length
 
-            final_improvement = (self.initial_length - self.best_length) / self.initial_length
-            remaining_budget_fraction = 1.0 - (self.current_step / max(1, self.max_steps))
+            final_improvement = (
+                self.initial_length - self.best_length
+            ) / self.initial_length
 
-            reward = (
-                self.stop_bonus_weight * final_improvement
-                + self.stop_time_bonus_weight * remaining_budget_fraction * final_improvement
-            )
-
-            # Prevent the trivial policy that stops immediately without improving.
             if final_improvement <= 1e-12:
-                reward -= self.early_stop_no_improvement_penalty
+                reward = -self.early_stop_no_improvement_penalty
+            else:
+                remaining_budget_fraction = 1.0 - (
+                    self.current_step / max(1, self.max_steps)
+                )
+                reward = (
+                    self.stop_reward_weight * final_improvement
+                    + self.stop_time_bonus_weight * remaining_budget_fraction
+                )
 
             self.last_improvement = 0.0
 
@@ -161,22 +172,32 @@ class TSPOperatorEnv(gym.Env):
                 rng=self.rng,
             )
 
-            self.current_tour = new_tour
-            self.current_length = new_length
-
-            improvement = (old_length - new_length) / old_length
-
-            reward = improvement - self.step_penalty
-
-            if improved and new_length < self.best_length:
+            # Update best archive if the action found a new best solution.
+            if new_length < self.best_length:
                 self.best_tour = new_tour.copy()
                 self.best_length = new_length
+                self.current_tour = new_tour
+                self.current_length = new_length
                 self.steps_since_improvement = 0
-                self.last_improvement = improvement
             else:
                 self.steps_since_improvement += 1
-                self.last_improvement = improvement
-                reward -= self.no_improvement_penalty
+
+                if self.restore_best_on_failure:
+                    self.current_tour = self.best_tour.copy()
+                    self.current_length = self.best_length
+                else:
+                    self.current_tour = new_tour
+                    self.current_length = new_length
+
+            best_improvement = (
+                old_best_length - self.best_length
+            ) / self.initial_length
+
+            action_cost = self.action_costs.get(action_label, 0.01)
+
+            reward = self.reward_scale * best_improvement - action_cost
+
+            self.last_improvement = best_improvement
 
         self.current_step += 1
         self.last_action = action
@@ -188,6 +209,7 @@ class TSPOperatorEnv(gym.Env):
         info = self._get_info()
 
         return observation, float(reward), terminated, truncated, info
+
 
     def _get_observation(self) -> np.ndarray:
         stats = tour_edge_statistics(self.current_tour, self.instance)

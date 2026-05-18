@@ -5,16 +5,23 @@ from src.operators.two_opt import two_opt_best_improvement, two_opt_first_improv
 from src.operators.swap import swap_best_improvement
 from src.operators.relocate import relocate_best_improvement
 from src.operators.perturb import perturb_then_two_opt
+from src.operators.full_two_opt import (
+    full_two_opt,
+    perturb_then_full_two_opt,
+    multi_perturb_then_full_two_opt,
+)
 
 
 STOP_ACTION = 0
 
 ACTION_NAMES = {
     0: "stop",
-    1: "two_opt",
+    1: "sampled_two_opt",
     2: "swap",
     3: "relocate",
-    4: "perturb_two_opt",
+    4: "perturb_sampled_two_opt",
+    5: "full_two_opt",
+    6: "multi_perturb_full_two_opt",
 }
 
 
@@ -127,5 +134,37 @@ def apply_operator(
         )
 
         return new_tour, new_length, improved, {"operator": "perturb_two_opt"}
+    
+    if action == 5:
+        op_config = config.get("full_two_opt", {})
+        max_passes = op_config.get("max_passes", 1000)
+
+        new_tour, new_length, improved = full_two_opt(
+            tour,
+            instance,
+            max_passes=max_passes,
+            rng=rng,
+        )
+
+        return new_tour, new_length, improved, {"operator": "full_two_opt"}
+
+    if action == 6:
+        op_config = config.get("multi_perturb_full_two_opt", {})
+        perturb_strength = op_config.get("perturb_strength", 1)
+        num_trials = op_config.get("num_trials", 3)
+        max_passes = op_config.get("max_passes", 1000)
+
+        new_tour, new_length, improved = multi_perturb_then_full_two_opt(
+            tour,
+            instance,
+            perturb_strength=perturb_strength,
+            num_trials=num_trials,
+            max_passes=max_passes,
+            rng=rng,
+        )
+
+        return new_tour, new_length, improved, {
+            "operator": "multi_perturb_full_two_opt"
+        }
 
     raise ValueError(f"Unknown action: {action}")
